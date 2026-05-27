@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../providers/auth_provider.dart';
+import '../../theme/app_colors.dart';
+import '../../theme/app_text_styles.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
@@ -33,18 +35,20 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
+    return Scaffold(
       body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Protacol',
-              style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
-            ),
-            SizedBox(height: 16),
-            CircularProgressIndicator(),
-          ],
+        child: Text.rich(
+          TextSpan(
+            children: const [
+              TextSpan(text: 'prot'),
+              TextSpan(
+                text: 'a',
+                style: TextStyle(color: AppColors.accent),
+              ),
+              TextSpan(text: 'col'),
+            ],
+          ),
+          style: AppTextStyles.display60,
         ),
       ),
     );

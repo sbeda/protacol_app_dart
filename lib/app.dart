@@ -7,6 +7,8 @@ import 'screens/auth/login_screen.dart';
 import 'screens/home/home_screen.dart';
 import 'screens/habits/habits_screen.dart';
 import 'widgets/app_shell.dart';
+import 'theme/app_theme.dart';
+import 'screens/diary/diary_screen.dart';
 
 class ProtacolApp extends StatelessWidget {
   ProtacolApp({super.key});
@@ -53,7 +55,7 @@ class ProtacolApp extends StatelessWidget {
           child: AppShell(
             currentIndex: 3,
             title: 'Дневник',
-            child: const _PlaceholderScreen(title: 'Дневник'),
+            child: const DiaryScreen(),
           ),
         ),
       ),
@@ -74,9 +76,9 @@ class ProtacolApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp.router(
       title: 'Protacol',
-      themeMode: ThemeMode.dark,
-      darkTheme: ThemeData.dark(),
+      theme: AppTheme.dark,
       routerConfig: _router,
+      debugShowCheckedModeBanner: false,
     );
   }
 }

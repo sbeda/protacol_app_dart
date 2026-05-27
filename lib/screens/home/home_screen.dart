@@ -1,9 +1,11 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
-import '../../models/workspace.dart';
-import '../../providers/auth_provider.dart';
 import '../../providers/home_provider.dart';
+import '../../theme/app_colors.dart';
+import '../../theme/app_text_styles.dart';
+import 'package:flutter/material.dart';
+import '../voice/voice_capture_screen.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -25,51 +27,38 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     return homeState.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, _) => Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('Ошибка: $error', style: const TextStyle(color: Colors.red)),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () => ref.read(homeProvider.notifier).loadWorkspace(),
-              child: const Text('Повторить'),
-            ),
-          ],
-        ),
+      error: (error, _) => _ErrorView(
+        error: error.toString(),
+        onRetry: () {
+          ref.read(homeProvider.notifier).loadWorkspace();
+        },
       ),
       data: (data) {
         if (data == null) return const SizedBox.shrink();
         final ws = data.workspace;
+        final firstQuote = ws.quotes.isNotEmpty ? ws.quotes.first : null;
 
         return RefreshIndicator(
           onRefresh: () => ref.read(homeProvider.notifier).loadWorkspace(),
           child: ListView(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
             children: [
-              _WelcomeSection(
-                quotes: ws.quotes,
-                daysSinceRegistration: ws.daysSinceRegistration,
+              _Header(name: 'Владислав'),
+              const SizedBox(height: 16),
+              _Quote(
+                text: firstQuote?.text ?? '',
+                author: firstQuote?.author ?? '',
               ),
-              const SizedBox(height: 16),
-              _QuickMetrics(
-                todayPotential: ws.realizedPotential.today,
-                yesterdayPotential: ws.realizedPotential.yesterday,
-                mood: ws.mood,
-                completedGoals: ws.completedGoals,
-                surveyStatus: ws.surveyInfo?.status,
+              const SizedBox(height: 20),
+              _MetricsGrid(
+                potential: ws.realizedPotential.today,
+                experimentDay: ws.daysSinceRegistration,
+                burnoutRisk: 'Высокий',
+                insights: 15,
               ),
+              const SizedBox(height: 32),
+              const _VoiceDiaryButton(),
               const SizedBox(height: 16),
-              _PotentialBars(
-                month: ws.realizedPotential.month,
-                week: ws.realizedPotential.week,
-              ),
-              const SizedBox(height: 16),
-              _DynamicsSection(dynamics: ws.realizedPotential.dynamics),
-              const SizedBox(height: 16),
-              _AchievementsGrid(achievements: ws.achievements),
-              const SizedBox(height: 16),
-              _NewsSection(news: ws.news),
             ],
           ),
         );
@@ -78,331 +67,156 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 }
 
-// Виджеты-заглушки
-
-class _WelcomeSection extends StatelessWidget {
-  final List<dynamic> quotes;
-  final int daysSinceRegistration;
-
-  const _WelcomeSection({
-    required this.quotes,
-    required this.daysSinceRegistration,
-  });
+class _ErrorView extends StatelessWidget {
+  final String error;
+  final VoidCallback onRetry;
+  const _ErrorView({required this.error, required this.onRetry});
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                quotes.isNotEmpty
-                    ? '«${quotes.first.text}»'
-                    : 'С возвращением!',
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
-            ),
-            const SizedBox(width: 16),
-            Column(
-              children: [
-                const Text('Дней в проекте', style: TextStyle(fontSize: 12)),
-                Text(
-                  '$daysSinceRegistration',
-                  style: const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('Ошибка: $error', style: const TextStyle(color: Colors.red)),
+          const SizedBox(height: 16),
+          TextButton(onPressed: onRetry, child: const Text('Повторить')),
+        ],
       ),
     );
   }
 }
 
-class _QuickMetrics extends StatelessWidget {
-  final int todayPotential;
-  final int yesterdayPotential;
-  final String? mood;
-  final int completedGoals;
-  final String? surveyStatus;
-
-  const _QuickMetrics({
-    required this.todayPotential,
-    required this.yesterdayPotential,
-    this.mood,
-    required this.completedGoals,
-    this.surveyStatus,
-  });
-
-  String _moodEmoji(String? mood) {
-    const map = {
-      'Энергичный': '⚡',
-      'Спокойный': '😌',
-      'Творческий': '🎨',
-      'Тревожный': '😰',
-      'Раздраженный': '😤',
-      'Грустный': '😢',
-      'Радостный': '😊',
-      'Апатичный': '😑',
-      'Мотивированный': '💪',
-      'Выгоревший': '😮‍💨',
-    };
-    return map[mood] ?? '😐';
-  }
+class _Header extends StatelessWidget {
+  final String name;
+  const _Header({required this.name});
 
   @override
   Widget build(BuildContext context) {
-    final diff = todayPotential - yesterdayPotential;
-    final sign = diff >= 0 ? '+' : '';
-
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
+    return Row(
       children: [
-        _MetricCard(
-          title: 'Реализованный потенциал',
-          value: '$todayPotential%',
-          subtitle: '$sign$diff%',
+        IconButton(
+          icon: const Icon(Icons.menu, color: AppColors.textPrimary, size: 28),
+          onPressed: () {},
         ),
-        _MetricCard(title: 'Настроение', value: _moodEmoji(mood)),
-        _MetricCard(title: 'Целей достигнуто', value: '$completedGoals'),
-        _MetricCard(
-          title: 'Опросник',
-          value: surveyStatus == 'completed'
-              ? '✓'
-              : surveyStatus == null
-              ? '⏲'
-              : '✗',
-          subtitle: surveyStatus == 'completed'
-              ? 'Пройден'
-              : surveyStatus == null
-              ? 'Не назначен'
-              : 'Не пройден',
+        const Spacer(),
+        Text('С возвращением, $name!', style: AppTextStyles.text16Light),
+        const SizedBox(width: 8),
+      ],
+    );
+  }
+}
+
+class _Quote extends StatelessWidget {
+  final String text;
+  final String author;
+  const _Quote({required this.text, required this.author});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text(
+          text,
+          style: AppTextStyles.text13Thin,
+          textAlign: TextAlign.center,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          author.isNotEmpty ? '— $author —' : '',
+          style: AppTextStyles.text12ThinItalic,
+          textAlign: TextAlign.center,
         ),
       ],
     );
   }
 }
 
-class _MetricCard extends StatelessWidget {
-  final String title;
-  final String value;
-  final String? subtitle;
+class _MetricsGrid extends StatelessWidget {
+  final int potential;
+  final int experimentDay;
+  final String burnoutRisk;
+  final int insights;
 
-  const _MetricCard({required this.title, required this.value, this.subtitle});
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: (MediaQuery.of(context).size.width - 48) / 2,
-      child: Card(
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            children: [
-              Text(title, style: const TextStyle(fontSize: 12)),
-              const SizedBox(height: 4),
-              Text(
-                value,
-                style: const TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              if (subtitle != null)
-                Text(subtitle!, style: const TextStyle(fontSize: 12)),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _PotentialBars extends StatelessWidget {
-  final int month;
-  final int week;
-
-  const _PotentialBars({required this.month, required this.week});
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Реализованный потенциал',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    children: [
-                      const Text('МЕСЯЦ', style: TextStyle(fontSize: 10)),
-                      const SizedBox(height: 4),
-                      Container(
-                        height: 100,
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Stack(
-                          alignment: Alignment.bottomCenter,
-                          children: [
-                            Container(
-                              height: month.toDouble(),
-                              color: Theme.of(context).colorScheme.primary,
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text('$month%'),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    children: [
-                      const Text('НЕДЕЛЯ', style: TextStyle(fontSize: 10)),
-                      const SizedBox(height: 4),
-                      Container(
-                        height: 100,
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Stack(
-                          alignment: Alignment.bottomCenter,
-                          children: [
-                            Container(
-                              height: week.toDouble(),
-                              color: Theme.of(context).colorScheme.secondary,
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text('$week%'),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _DynamicsSection extends StatelessWidget {
-  final Dynamics dynamics;
-
-  const _DynamicsSection({required this.dynamics});
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Динамика за 90 дней',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _StatItem(
-                  label: 'Средний потенциал',
-                  value: '${dynamics.average}%',
-                ),
-                _StatItem(
-                  label: 'Темп роста',
-                  value:
-                      '${dynamics.growth >= 0 ? "+" : ""}${dynamics.growth}%',
-                  isPositive: dynamics.growth >= 0,
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              height: 100,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: dynamics.daily.map((d) {
-                  return Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 1),
-                      child: Container(
-                        height: d.potential.toDouble(),
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.primary.withOpacity(0.7),
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _StatItem extends StatelessWidget {
-  final String label;
-  final String value;
-  final bool isPositive;
-
-  const _StatItem({
-    required this.label,
-    required this.value,
-    this.isPositive = true,
+  const _MetricsGrid({
+    required this.potential,
+    required this.experimentDay,
+    required this.burnoutRisk,
+    required this.insights,
   });
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Text(label, style: const TextStyle(fontSize: 11)),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: isPositive ? Colors.green : Colors.red,
-          ),
+        Row(
+          children: [
+            Expanded(
+              child: _GlassCard(child: _PotentialContent(value: potential)),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _GlassCard(child: _ExperimentContent(day: experimentDay)),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _GlassCard(child: _BurnoutContent(level: burnoutRisk)),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _GlassCard(child: _InsightsContent(count: insights)),
+            ),
+          ],
         ),
       ],
     );
   }
 }
 
-class _AchievementsGrid extends StatelessWidget {
-  final List<Achievement> achievements;
+class _GlassCard extends StatelessWidget {
+  final Widget child;
+  const _GlassCard({required this.child});
 
-  const _AchievementsGrid({required this.achievements});
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          padding: const EdgeInsets.all(1.5),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            gradient: const LinearGradient(
+              begin: Alignment.topRight,
+              end: Alignment.bottomLeft,
+              colors: [AppColors.accent, AppColors.borderBlue],
+            ),
+          ),
+          child: Container(
+            height: 140,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppColors.card.withOpacity(0.85),
+              borderRadius: BorderRadius.circular(19),
+            ),
+            child: child,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PotentialContent extends StatelessWidget {
+  final int value;
+  const _PotentialContent({required this.value});
 
   @override
   Widget build(BuildContext context) {
@@ -410,92 +224,224 @@ class _AchievementsGrid extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
-          'Наши достижения',
-          style: TextStyle(fontWeight: FontWeight.bold),
+          'Реализованный\nпотенциал',
+          style: AppTextStyles.cardTitle14,
         ),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: achievements.take(6).map((a) {
-            final days = a.createdAt.difference(a.updatedAt).inDays.abs();
-            return SizedBox(
-              width: (MediaQuery.of(context).size.width - 48) / 2,
-              child: Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        a.title,
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      Text('$days дн.'),
-                      Text('${a.targetValue} ${a.type}'),
-                    ],
-                  ),
-                ),
+        const Spacer(),
+        Text('$value%', style: AppTextStyles.cardValueLarge),
+      ],
+    );
+  }
+}
+
+class _ExperimentContent extends StatelessWidget {
+  final int day;
+  const _ExperimentContent({required this.day});
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            const Text('Эксперимент', style: AppTextStyles.cardTitle14),
+            const SizedBox(height: 4),
+            Text(
+              'День',
+              style: AppTextStyles.text14Light,
+              textAlign: TextAlign.right,
+            ),
+            const Spacer(),
+            Text(
+              '$day',
+              style: AppTextStyles.cardValueMedium.copyWith(
+                color: AppColors.accent,
               ),
-            );
-          }).toList(),
+            ),
+          ],
+        ),
+        Positioned(
+          left: 0,
+          bottom: 0,
+          child: Icon(
+            Icons.science_outlined,
+            color: AppColors.textPrimary.withOpacity(0.4),
+            size: 56,
+          ),
         ),
       ],
     );
   }
 }
 
-class _NewsSection extends StatelessWidget {
-  final NewsData news;
-
-  const _NewsSection({required this.news});
+class _BurnoutContent extends StatelessWidget {
+  final String level;
+  const _BurnoutContent({required this.level});
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Stack(
       children: [
-        const Text('Новости', style: TextStyle(fontWeight: FontWeight.bold)),
-        const SizedBox(height: 8),
-        Text(
-          'Новости проекта',
-          style: TextStyle(
-            fontWeight: FontWeight.w600,
-            color: Colors.grey[400],
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Риск истощения', style: AppTextStyles.cardTitle14),
+            const SizedBox(height: 8),
+            Text(
+              level,
+              style: AppTextStyles.italicValue.copyWith(
+                color: AppColors.accent,
+              ),
+            ),
+          ],
+        ),
+        Positioned(
+          right: 0,
+          bottom: 0,
+          child: Icon(
+            Icons.warning_amber_rounded,
+            color: AppColors.textPrimary.withOpacity(0.4),
+            size: 56,
           ),
         ),
-        ...news.project
-            .take(3)
-            .map(
-              (n) => ListTile(
-                dense: true,
-                title: Text(n.title, style: const TextStyle(fontSize: 14)),
-                subtitle: Text(
-                  n.previewText,
-                  style: const TextStyle(fontSize: 12),
+      ],
+    );
+  }
+}
+
+class _InsightsContent extends StatelessWidget {
+  final int count;
+  const _InsightsContent({required this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            const Text('Инсайты', style: AppTextStyles.cardTitle14),
+            const Spacer(),
+            Text(
+              '$count',
+              style: AppTextStyles.cardValueMedium.copyWith(
+                color: AppColors.accent,
+              ),
+            ),
+          ],
+        ),
+        Positioned(
+          left: 0,
+          bottom: 0,
+          child: Icon(
+            Icons.lightbulb_outline,
+            color: AppColors.textPrimary.withOpacity(0.4),
+            size: 56,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _VoiceDiaryButton extends StatelessWidget {
+  const _VoiceDiaryButton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: SizedBox(
+        width: 320,
+        height: 320,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Container(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    AppColors.accent.withOpacity(0.35),
+                    AppColors.accent.withOpacity(0.08),
+                    Colors.transparent,
+                  ],
+                  stops: const [0.3, 0.6, 1.0],
                 ),
               ),
             ),
-        const SizedBox(height: 8),
-        Text(
-          'Исследования и советы',
-          style: TextStyle(
-            fontWeight: FontWeight.w600,
-            color: Colors.grey[400],
-          ),
-        ),
-        ...news.research
-            .take(3)
-            .map(
-              (n) => ListTile(
-                dense: true,
-                title: Text(n.title, style: const TextStyle(fontSize: 14)),
-                subtitle: Text(
-                  n.previewText,
-                  style: const TextStyle(fontSize: 12),
+            Container(
+              width: 200,
+              height: 200,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.background,
+                border: Border.all(
+                  color: AppColors.accent.withOpacity(0.55),
+                  width: 1.2,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.accent.withOpacity(0.3),
+                    blurRadius: 30,
+                  ),
+                ],
+              ),
+              child: Material(
+                color: Colors.transparent,
+                shape: const CircleBorder(),
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        fullscreenDialog: true,
+                        builder: (_) => const VoiceCaptureScreen(),
+                      ),
+                    );
+                  },
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const _Equalizer(),
+                      const SizedBox(height: 20),
+                      Text(
+                        'Как прошёл ваш день?',
+                        style: AppTextStyles.text13Thin,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Equalizer extends StatelessWidget {
+  const _Equalizer();
+
+  @override
+  Widget build(BuildContext context) {
+    const heights = [22.0, 40.0, 58.0, 40.0, 22.0];
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        for (var i = 0; i < heights.length; i++) ...[
+          Container(
+            width: 6,
+            height: heights[i],
+            decoration: BoxDecoration(
+              color: AppColors.accent,
+              borderRadius: BorderRadius.circular(3),
+            ),
+          ),
+          if (i != heights.length - 1) const SizedBox(width: 6),
+        ],
       ],
     );
   }
